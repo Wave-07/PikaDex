@@ -708,25 +708,20 @@ def run_flask():
     flask_app.run(host='0.0.0.0', port=port)
 
 # --- MAIN EXECUTION ---
+async def post_init(application):
+    await load_resources()
+
 if __name__ == '__main__':
-    # 1. Start the dummy web server in a separate thread
     t = Thread(target=run_flask)
     t.start()
 
-    # 2. Load Resources
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(load_resources())
-
-    # 3. Start the Bot
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
     
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('data', data_command))
     app.add_handler(CommandHandler('hpin', hpin_command))
     app.add_handler(CommandHandler('ppin', ppin_command))
     app.add_handler(CallbackQueryHandler(button_callback))
-    
-    # Text Handler
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
     
     print("Bot is running...")
