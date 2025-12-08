@@ -128,6 +128,21 @@ def calculate_stats_range(base, stat_name):
         max_stat = int(((2 * base) + 99) * 1.1)
     return min_stat, max_stat
 
+# --- REFINED NATURE LOGIC ---
+def get_recommended_natures(stats):
+    atk = stats.get('attack', 0)
+    spa = stats.get('special-attack', 0)
+    
+    # MIXED ATTACKER CHECK (Threshold 15)
+    if abs(atk - spa) <= 15:
+        return "Modest, Timid, Bold, Calm, Adamant, Jolly, Impish, Careful"
+    # SPECIAL ATTACKER
+    elif spa > atk:
+        return "Modest, Timid, Bold, Calm"
+    # PHYSICAL ATTACKER
+    else:
+        return "Adamant, Jolly, Impish, Careful"
+
 def get_type_effectiveness_local(types):
     if 'types' not in DB: return {}
     multipliers = {}
@@ -163,6 +178,20 @@ def get_suggestions_keyboard(suggestions):
     for s in suggestions:
         btn_text = s.replace('-', ' ').title()
         row.append(InlineKeyboardButton(btn_text, callback_data=f"search|{s}"))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row: keyboard.append(row)
+    return InlineKeyboardMarkup(keyboard)
+
+# --- NEW: Specific Keyboard for BestNat Suggestions ---
+def get_bestnat_suggestions_keyboard(suggestions):
+    keyboard = []
+    row = []
+    for s in suggestions:
+        btn_text = s.replace('-', ' ').title()
+        # Uses 'bnat' prefix to distinguish from normal data lookup
+        row.append(InlineKeyboardButton(btn_text, callback_data=f"bnat|{s}"))
         if len(row) == 2:
             keyboard.append(row)
             row = []
@@ -211,23 +240,48 @@ async def ppin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 <b>Pikadex Ready.</b>\nUsage: <code>/data name</code>", parse_mode=ParseMode.HTML)
+    await update.message.reply_text("👋 <b>Pikadex Ready (Local Mode).</b>\nUsage: <code>/data name</code>", parse_mode=ParseMode.HTML)
 
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     text = update.message.text.strip().lower()
+    user_tag = f"@{update.message.from_user.username}" if update.message.from_user.username else update.message.from_user.first_name
 
+    # 1. Nature
     if text in NATURE_DATA:
         data = NATURE_DATA[text]
         name_display = text.title()
-        user = update.message.from_user
-        user_tag = f"@{user.username}" if user.username else user.first_name
-        
         if data['up'] == 'None': stat_text = "⚖️ <b>Neutral Nature</b> (No changes)"
         else: stat_text = f"📈 <b>Increases</b> : {data['up']} (+10%)\n📉 <b>Decreases</b> : {data['down']} (-10%)"
-
         msg = f"<b>━━━━━━━━━━━━━━━━━━</b>\n<blockquote>🌿 <b>Nature</b> : <b>{name_display}</b>\n\n{stat_text}</blockquote>\n<b>━━━━━━━━━━━━━━━━━━</b>\n👤 <i>Checked by</i> : {user_tag}"
         await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+        return
+
+    # 2. Move (Format: "focus punch" -> "focus-punch")
+    move_key = text.replace(" ", "-")
+    if move_key in DB.get('moves', {}):
+        m_data = DB['moves'][move_key]
+        move_name = text.title()
+        m_type = m_data.get('t', 'unknown')
+        type_icon = TYPE_EMOJIS.get(m_type, '⚪')
+        
+        power = m_data.get('p') if m_data.get('p') else "None"
+        acc = m_data.get('a') if m_data.get('a') else "100"
+        pp = m_data.get('pp') if m_data.get('pp') else "None"
+        desc = m_data.get('d', "No description available.")
+        # Default to Status if class missing, display title case
+        m_class = m_data.get('c', 'Status').title() 
+
+        msg = (
+            f"<b>Move</b> : <b>{move_name}</b> {type_icon}\n"
+            f"💥{power}  🎯{acc}  🔋{pp} | {m_class}\n\n"
+            f"<blockquote>"
+            f"<b>Effect</b> : <i>{desc}</i>\n"
+            f"</blockquote>\n" 
+            f"👤 <i>Checked by</i> : {user_tag}"
+        )
+        await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+        return
 
 async def send_main_profile(update: Update, context: ContextTypes.DEFAULT_TYPE, name, user_tag="Unknown", is_callback=False, is_shiny=False):
     pokemon = DB['pokemon'].get(name)
@@ -258,13 +312,10 @@ async def send_main_profile(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         bar = generate_stat_bar(val)
         stat_text += f"<b>{s_map.get(s_name, '???')}</b> : {val} ({min_v}-{max_v}) {bar}\n"
 
-    # --- UPDATED: Use Saved URLs ---
-    if is_shiny:
-        img_url = pokemon.get('shiny_url', '')
-    else:
-        img_url = pokemon.get('normal_url', '')
+    # Saved URLs
+    if is_shiny: img_url = pokemon.get('shiny_url', '')
+    else: img_url = pokemon.get('normal_url', '')
     
-    # Fallback if URL is missing in DB
     if not img_url:
         img_url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{p_id}.png"
 
@@ -304,6 +355,30 @@ async def send_main_profile(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             except: pass
             await context.bot.send_message(chat_id=update.callback_query.message.chat_id, text=text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
+# --- NEW: Helper to Send BestNat Response ---
+async def send_bestnat_response(update, context, name, is_callback=False):
+    p_data = DB['pokemon'][name]
+    name_title = p_data['name'].replace('-', ' ').title()
+    natures = get_recommended_natures(p_data['stats'])
+    
+    # --- THIS WAS ALSO MISSING ---
+    # Determine who the user is based on if it's a button click or a message
+    if is_callback:
+        user = update.callback_query.from_user
+    else:
+        user = update.message.from_user
+    
+    user_tag = f"@{user.username}" if user.username else user.first_name
+    # -----------------------------
+
+    # FORMATTED OUTPUT with Emojis and Bold
+    msg = f"🎯 I’d say the best natures for <b>{name_title}</b> are :- \n <blockquote><b>{natures}</b></blockquote>\n\n 👤 <i>Requested by</i> : {user_tag}"
+    
+    if is_callback:
+        await update.callback_query.message.edit_text(msg, parse_mode=ParseMode.HTML)
+    else:
+        await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     
@@ -341,6 +416,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_main_profile(update, context, name, user_tag, is_callback=True)
     elif action == "shiny":
         await send_main_profile(update, context, name, user_tag, is_callback=True, is_shiny=True)
+    # --- NEW: Action for BestNat buttons ---
+    elif action == "bnat":
+        await send_bestnat_response(update, context, name, is_callback=True)
+        
     elif action == "mov_menu":
         try:
             await query.message.edit_text(f"⚔️ <b>Moveset : {name.title()}</b>\nSelect a category to view moves:", reply_markup=get_moves_menu_keyboard(name), parse_mode=ParseMode.HTML)
@@ -402,14 +481,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i, m in enumerate(current_batch):
             list_num = start_idx + i + 1
             move_name = m['n'].replace('-', ' ').title()
-            details = DB['moves'].get(m['n'], {'p': '-', 'a': '-', 'pp': '-', 't': 'unknown'})
+            
+            details = DB['moves'].get(m['n'], {'p': '-', 'a': '-', 'pp': '-', 't': 'unknown', 'c': 'Status'})
             type_icon = TYPE_EMOJIS.get(details['t'], '⚪')
+            move_class = details.get('c', 'Status').title()
+
             if cat == 'level-up': prefix = f"Lv.{m['l']:02}"
             elif cat == 'machine':
                 tm_num = CUSTOM_TM_MAP.get(move_name, "")
                 prefix = f"TM{tm_num}" if tm_num else "TM"
             else: prefix = "🥚"
-            lines.append(f"<b>{list_num}. {prefix} ➜ {move_name} {type_icon}</b>\n      💥{details['p']}  🎯{details['a']}  🔋{details['pp']}")
+            
+            lines.append(
+                f"<b>{list_num}. {prefix} ➜ {move_name} {type_icon}</b>\n"
+                f"      💥{details['p'] or 'None'}  🎯{details['a'] or 'None'}  🔋{details['pp'] or 'None'} | {move_class}"
+            )
 
         content = "\n\n".join(lines)
         try:
@@ -469,6 +555,38 @@ async def data_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ No Pokémon found.", parse_mode=ParseMode.HTML)
 
+# --- UPDATED COMMAND: /bestnat with Typo Check & Buttons ---
+async def bestnat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("⚠️ Usage: <code>/bestnat name</code>", parse_mode=ParseMode.HTML)
+        return
+    
+    # --- THIS WAS MISSING ---
+    # We need to define user_tag before using it
+    user = update.message.from_user
+    user_tag = f"@{user.username}" if user.username else user.first_name
+    # ------------------------
+
+    # Handle multi-word queries if needed, and lowercase immediately
+    query = " ".join(context.args).lower().strip()
+    
+    # 1. Exact Match Check
+    if query in DB['pokemon']:
+        await send_bestnat_response(update, context, query)
+        return
+
+    # 2. Fuzzy Match / Typo Handling (Get 12 best matches)
+    matches = difflib.get_close_matches(query, POKEMON_NAMES, n=12, cutoff=0.5)
+    
+    if matches:
+        await update.message.reply_text(
+            f"🤔 <b>Pokemon not found.</b>\n\n👤 <i>Requested by</i> : {user_tag}\n\nDid you mean one of these for Best Nature?", 
+            reply_markup=get_bestnat_suggestions_keyboard(matches), 
+            parse_mode=ParseMode.HTML
+        )
+    else:
+        await update.message.reply_text("❌ Pokémon not found.", parse_mode=ParseMode.HTML)
+
 async def post_init(application):
     await load_resources()
 
@@ -487,10 +605,11 @@ if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('data', data_command))
+    app.add_handler(CommandHandler('bestnat', bestnat_command))
     app.add_handler(CommandHandler('hpin', hpin_command))
     app.add_handler(CommandHandler('ppin', ppin_command))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
-
+    
     print("Bot is running...")
     app.run_polling()
