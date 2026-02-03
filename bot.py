@@ -17,7 +17,7 @@ from telegram.ext import (
 BOT_TOKEN = os.environ.get("BOT_TOKEN") 
 
 if not BOT_TOKEN:
-    print("❌ Error: BOT_TOKEN is missing! Set it in Render Environment Variables.")
+    print("❌ Error: BOT_TOKEN is missing! Set it in Render Environment Variables.", flush=True)
     exit(1)
 
 # --- BOT IDs ---
@@ -598,10 +598,20 @@ def index():
     return "Bot is running!"
 
 def run_flask():
-    flask_app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+    try:
+        # use_reloader=False is required when running Flask in a separate thread
+        flask_app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)), use_reloader=False)
+    except Exception as e:
+        print(f"❌ Flask Server Error: {e}", flush=True)
 
 if __name__ == '__main__':
-    Thread(target=run_flask).start()
+    # Start the web server in a separate thread
+    flask_thread = Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+    
+    print("✅ Web Server Thread Started", flush=True)
+
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('data', data_command))
@@ -611,5 +621,5 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
     
-    print("Bot is running...")
+    print("🤖 Bot is starting polling...", flush=True)
     app.run_polling()
