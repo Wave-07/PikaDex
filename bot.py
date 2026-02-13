@@ -1,6 +1,5 @@
-import logging
-import json
 import os
+import sys
 import difflib
 import asyncio
 from flask import Flask
@@ -9,7 +8,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import (
     ApplicationBuilder, ContextTypes, CommandHandler, 
-    CallbackQueryHandler, MessageHandler, filters
+    CallbackQueryHandler, MessageHandler, filters,
+    PicklePersistence
 )
 
 # --- CONFIGURATION ---
@@ -102,6 +102,16 @@ CUSTOM_TM_MAP = {
 }
 
 # --- HELPERS ---
+async def auto_restart_job(context: ContextTypes.DEFAULT_TYPE):
+    """Restarts the bot every 12 hours to free RAM, saving session first."""
+    print("♻️ Scheduled Restart: Saving session and reloading process...", flush=True)
+    # Force save persistence data
+    if context.application.persistence:
+        await context.application.persistence.flush()
+    
+    # Reload process to clear RAM
+    os.execl(sys.executable, sys.executable, *sys.argv)
+
 async def load_resources():
     global DB, POKEMON_NAMES
     print("⏳ Loading Local Database (pokedex.json)...")
@@ -612,7 +622,14 @@ if __name__ == '__main__':
     
     print("✅ Web Server Thread Started", flush=True)
 
-    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
+    # Persistence saves the bot's state (chats, user data) to disk so it survives the restart
+    my_persistence = PicklePersistence(filepath='bot_session.pickle')
+
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).persistence(my_persistence).build()
+
+    # Schedule the auto-restart every 12 hours (43200 seconds)
+    app.job_queue.run_repeating(auto_restart_job, interval=43200, first=43200)
+
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('data', data_command))
     app.add_handler(CommandHandler('bestnat', bestnat_command))
