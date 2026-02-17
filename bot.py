@@ -1,5 +1,6 @@
 import os
 import sys
+import logging
 import difflib
 import asyncio
 from flask import Flask
@@ -640,3 +641,4 @@ if __name__ == '__main__':
     
     print("🤖 Bot is starting polling...", flush=True)
     app.run_polling()
+
