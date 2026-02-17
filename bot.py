@@ -653,4 +653,8 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
     
     print("🤖 Bot is starting polling...", flush=True)
-    app.run_polling()
+    try:
+        # drop_pending_updates=True prevents conflict with the previous instance during restarts
+        app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        print(f"⚠️ Polling Error (Conflict or Network): {e}", flush=True)
