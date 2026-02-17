@@ -103,12 +103,13 @@ CUSTOM_TM_MAP = {
 }
 
 # --- HELPERS ---
-async def auto_restart_job(context: ContextTypes.DEFAULT_TYPE):
+async def auto_restart_task(application):
     """Restarts the bot every 12 hours to free RAM, saving session first."""
+    await asyncio.sleep(43200) # Wait 12 hours
     print("♻️ Scheduled Restart: Saving session and reloading process...", flush=True)
     # Force save persistence data
-    if context.application.persistence:
-        await context.application.persistence.flush()
+    if application.persistence:
+        await application.persistence.flush()
     
     # Reload process to clear RAM
     os.execl(sys.executable, sys.executable, *sys.argv)
@@ -600,6 +601,7 @@ async def bestnat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def post_init(application):
     await load_resources()
+    asyncio.create_task(auto_restart_task(application))
 
 # --- WEB SERVER TO KEEP BOT ALIVE ON RENDER ---
 flask_app = Flask(__name__)
@@ -628,9 +630,6 @@ if __name__ == '__main__':
 
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).persistence(my_persistence).build()
 
-    # Schedule the auto-restart every 12 hours (43200 seconds)
-    app.job_queue.run_repeating(auto_restart_job, interval=43200, first=43200)
-
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('data', data_command))
     app.add_handler(CommandHandler('bestnat', bestnat_command))
@@ -641,4 +640,3 @@ if __name__ == '__main__':
     
     print("🤖 Bot is starting polling...", flush=True)
     app.run_polling()
-
