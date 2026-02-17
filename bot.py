@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import logging
 import difflib
 import asyncio
@@ -252,7 +253,7 @@ async def ppin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 <b>Pikadex Ready (Local Mode).</b>\nUsage: <code>/data name</code>", parse_mode=ParseMode.HTML)
+    await update.message.reply_text("👋 <b>Pikadex Ready</b>\nUsage: <code>/data name</code>", parse_mode=ParseMode.HTML)
 
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
@@ -554,6 +555,11 @@ async def data_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("⚠️ Usage: <code>/data name</code>", parse_mode=ParseMode.HTML)
         return
+
+    if 'pokemon' not in DB:
+        await update.message.reply_text("⚠️ <b>Database not loaded.</b>", parse_mode=ParseMode.HTML)
+        return
+
     query = context.args[0].lower()
     user_tag = f"@{update.message.from_user.username}" if update.message.from_user.username else update.message.from_user.first_name
 
@@ -581,6 +587,10 @@ async def bestnat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Handle multi-word queries if needed, and lowercase immediately
     query = " ".join(context.args).lower().strip()
+
+    if 'pokemon' not in DB:
+        await update.message.reply_text("⚠️ <b>Database not loaded.</b>", parse_mode=ParseMode.HTML)
+        return
     
     # 1. Exact Match Check
     if query in DB['pokemon']:
@@ -598,6 +608,9 @@ async def bestnat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await update.message.reply_text("❌ Pokémon not found.", parse_mode=ParseMode.HTML)
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logging.error(msg="Exception while handling an update:", exc_info=context.error)
 
 async def post_init(application):
     await load_resources()
@@ -630,6 +643,7 @@ if __name__ == '__main__':
 
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).persistence(my_persistence).build()
 
+    app.add_error_handler(error_handler)
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('data', data_command))
     app.add_handler(CommandHandler('bestnat', bestnat_command))
