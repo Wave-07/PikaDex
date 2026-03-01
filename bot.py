@@ -25,6 +25,7 @@ if not BOT_TOKEN:
 # --- BOT IDs ---
 HEXA_BOT_ID = 572621020
 P_BOT_ID = 7955369039
+SEXA_BOT_ID = 8311035050
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -251,6 +252,9 @@ async def hpin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def ppin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await request_pin_time(update, context, P_BOT_ID)
 
+async def spin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await request_pin_time(update, context, SEXA_BOT_ID)
+    
 # --- HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 <b>Pikadex Ready</b>\nUsage: <code>/data name</code>", parse_mode=ParseMode.HTML)
@@ -649,6 +653,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('bestnat', bestnat_command))
     app.add_handler(CommandHandler('hpin', hpin_command))
     app.add_handler(CommandHandler('ppin', ppin_command))
+    app.add_handler(CommandHandler('spin', spin_command))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
     
