@@ -1,4 +1,4 @@
-# --- PikaDex by @WaveAce ---
+# --- PikaDex by @WaveAce --- 
 import os
 import sys
 import json
