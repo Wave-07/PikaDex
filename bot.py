@@ -1,3 +1,4 @@
+# --- PikaDex by @WaveAce ---
 import os
 import sys
 import json
@@ -14,24 +15,20 @@ from telegram.ext import (
     PicklePersistence
 )
 
-# --- CONFIGURATION ---
-# This reads the token from Render's settings
 BOT_TOKEN = os.environ.get("BOT_TOKEN") 
 
 if not BOT_TOKEN:
     print("❌ Error: BOT_TOKEN is missing! Set it in Render Environment Variables.", flush=True)
     exit(1)
 
-# --- BOT IDs ---
 HEXA_BOT_ID = 572621020
 P_BOT_ID = 7955369039
 SEXA_BOT_ID = 8311035050
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# --- DATABASE ---
-DB = {} 
-POKEMON_NAMES = []
+DB = {}
+POKEMON_NAMES = [] 
 
 TYPE_EMOJIS = {
     'normal': '🔘', 'fire': '🔥', 'water': '💧', 'electric': '⚡', 'grass': '🌱', 'ice': '❄️',
@@ -104,16 +101,13 @@ CUSTOM_TM_MAP = {
     "Dragon Cheer": "226", "Alluring Voice": "227", "Psychic Noise": "228", "Upper Hand": "229"
 }
 
-# --- HELPERS ---
 async def auto_restart_task(application):
     """Restarts the bot every 12 hours to free RAM, saving session first."""
-    await asyncio.sleep(43200) # Wait 12 hours
+    await asyncio.sleep(43200) 
     print("♻️ Scheduled Restart: Saving session and reloading process...", flush=True)
-    # Force save persistence data
     if application.persistence:
         await application.persistence.flush()
     
-    # Reload process to clear RAM
     os.execl(sys.executable, sys.executable, *sys.argv)
 
 async def load_resources():
@@ -142,18 +136,14 @@ def calculate_stats_range(base, stat_name):
         max_stat = int(((2 * base) + 99) * 1.1)
     return min_stat, max_stat
 
-# --- REFINED NATURE LOGIC ---
 def get_recommended_natures(stats):
     atk = stats.get('attack', 0)
     spa = stats.get('special-attack', 0)
     
-    # MIXED ATTACKER CHECK (Threshold 15)
     if abs(atk - spa) <= 15:
         return "Modest, Timid, Bold, Calm, Adamant, Jolly, Impish, Careful"
-    # SPECIAL ATTACKER
     elif spa > atk:
         return "Modest, Timid, Bold, Calm"
-    # PHYSICAL ATTACKER
     else:
         return "Adamant, Jolly, Impish, Careful"
 
@@ -168,7 +158,6 @@ def get_type_effectiveness_local(types):
             multipliers[atk_type] = current * factor
     return multipliers
 
-# --- KEYBOARDS ---
 def get_main_keyboard(name):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("⚔️ Moveset", callback_data=f"mov_menu|{name}"),
@@ -198,13 +187,11 @@ def get_suggestions_keyboard(suggestions):
     if row: keyboard.append(row)
     return InlineKeyboardMarkup(keyboard)
 
-# --- NEW: Specific Keyboard for BestNat Suggestions ---
 def get_bestnat_suggestions_keyboard(suggestions):
     keyboard = []
     row = []
     for s in suggestions:
         btn_text = s.replace('-', ' ').title()
-        # Uses 'bnat' prefix to distinguish from normal data lookup
         row.append(InlineKeyboardButton(btn_text, callback_data=f"bnat|{s}"))
         if len(row) == 2:
             keyboard.append(row)
@@ -226,7 +213,6 @@ def get_pin_time_keyboard(msg_id, chat_id, user_id):
         [InlineKeyboardButton("❌ Cancel", callback_data="cancel_pin")]
     ])
 
-# --- PINNING LOGIC ---
 async def run_pin_timer(bot, chat_id, message_id, duration_sec, tag_text):
     await asyncio.sleep(duration_sec)
     try:
@@ -255,7 +241,6 @@ async def ppin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def spin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await request_pin_time(update, context, SEXA_BOT_ID)
     
-# --- HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 <b>Pikadex Ready</b>\nUsage: <code>/data name</code>", parse_mode=ParseMode.HTML)
 
@@ -264,7 +249,6 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     text = update.message.text.strip().lower()
     user_tag = f"@{update.message.from_user.username}" if update.message.from_user.username else update.message.from_user.first_name
 
-    # 1. Nature
     if text in NATURE_DATA:
         data = NATURE_DATA[text]
         name_display = text.title()
@@ -274,7 +258,6 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
         return
 
-    # 2. Move (Format: "focus punch" -> "focus-punch")
     move_key = text.replace(" ", "-")
     if move_key in DB.get('moves', {}):
         m_data = DB['moves'][move_key]
@@ -286,7 +269,6 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         acc = m_data.get('a') if m_data.get('a') else "100"
         pp = m_data.get('pp') if m_data.get('pp') else "None"
         desc = m_data.get('d', "No description available.")
-        # Default to Status if class missing, display title case
         m_class = m_data.get('c', 'Status').title() 
 
         msg = (
@@ -329,7 +311,6 @@ async def send_main_profile(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         bar = generate_stat_bar(val)
         stat_text += f"<b>{s_map.get(s_name, '???')}</b> : {val} ({min_v}-{max_v}) {bar}\n"
 
-    # Saved URLs
     if is_shiny: img_url = pokemon.get('shiny_url', '')
     else: img_url = pokemon.get('normal_url', '')
     
@@ -372,23 +353,18 @@ async def send_main_profile(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             except: pass
             await context.bot.send_message(chat_id=update.callback_query.message.chat_id, text=text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
-# --- NEW: Helper to Send BestNat Response ---
 async def send_bestnat_response(update, context, name, is_callback=False):
     p_data = DB['pokemon'][name]
     name_title = p_data['name'].replace('-', ' ').title()
     natures = get_recommended_natures(p_data['stats'])
     
-    # --- THIS WAS ALSO MISSING ---
-    # Determine who the user is based on if it's a button click or a message
     if is_callback:
         user = update.callback_query.from_user
     else:
         user = update.message.from_user
     
     user_tag = f"@{user.username}" if user.username else user.first_name
-    # -----------------------------
 
-    # FORMATTED OUTPUT with Emojis and Bold
     msg = f"🎯 I’d say the best natures for <b>{name_title}</b> are :- \n <blockquote><b>{natures}</b></blockquote>\n\n 👤 <i>Requested by</i> : {user_tag}"
     
     if is_callback:
@@ -433,7 +409,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_main_profile(update, context, name, user_tag, is_callback=True)
     elif action == "shiny":
         await send_main_profile(update, context, name, user_tag, is_callback=True, is_shiny=True)
-    # --- NEW: Action for BestNat buttons ---
     elif action == "bnat":
         await send_bestnat_response(update, context, name, is_callback=True)
         
@@ -577,31 +552,24 @@ async def data_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ No Pokémon found.", parse_mode=ParseMode.HTML)
 
-# --- UPDATED COMMAND: /bestnat with Typo Check & Buttons ---
 async def bestnat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("⚠️ Usage: <code>/bestnat name</code>", parse_mode=ParseMode.HTML)
         return
     
-    # --- THIS WAS MISSING ---
-    # We need to define user_tag before using it
     user = update.message.from_user
     user_tag = f"@{user.username}" if user.username else user.first_name
-    # ------------------------
 
-    # Handle multi-word queries if needed, and lowercase immediately
     query = " ".join(context.args).lower().strip()
 
     if 'pokemon' not in DB:
         await update.message.reply_text("⚠️ <b>Database not loaded.</b>", parse_mode=ParseMode.HTML)
         return
     
-    # 1. Exact Match Check
     if query in DB['pokemon']:
         await send_bestnat_response(update, context, query)
         return
 
-    # 2. Fuzzy Match / Typo Handling (Get 12 best matches)
     matches = difflib.get_close_matches(query, POKEMON_NAMES, n=12, cutoff=0.5)
     
     if matches:
@@ -620,7 +588,6 @@ async def post_init(application):
     await load_resources()
     asyncio.create_task(auto_restart_task(application))
 
-# --- WEB SERVER TO KEEP BOT ALIVE ON RENDER ---
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -629,20 +596,17 @@ def index():
 
 def run_flask():
     try:
-        # use_reloader=False is required when running Flask in a separate thread
         flask_app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)), use_reloader=False)
     except Exception as e:
         print(f"❌ Flask Server Error: {e}", flush=True)
 
 if __name__ == '__main__':
-    # Start the web server in a separate thread
     flask_thread = Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
     
     print("✅ Web Server Thread Started", flush=True)
 
-    # Persistence saves the bot's state (chats, user data) to disk so it survives the restart
     my_persistence = PicklePersistence(filepath='bot_session.pickle')
 
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).persistence(my_persistence).build()
@@ -659,7 +623,6 @@ if __name__ == '__main__':
     
     print("🤖 Bot is starting polling...", flush=True)
     try:
-        # drop_pending_updates=True prevents conflict with the previous instance during restarts
         app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
     except Exception as e:
         print(f"⚠️ Polling Error (Conflict or Network): {e}", flush=True)
